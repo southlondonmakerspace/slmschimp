@@ -1168,9 +1168,15 @@ def main():
 
 
 if __name__ == '__main__':
-    logging.info('SLMSChimp v1.1 ')
+    logging.info('SLMSChimp v1.2 (2026-09-19)')
+    
     mc = MailChimpAPI()
     automation = Automation()
+
+    """ force subscribe list_members and add/remove invite tag and check if 18+"""
+    automation.pre_process(automation.process_responses())
+
+    """ API needs to refresh list_members_info, thus: """
     processed_responses = automation.process_responses()
 
     main()
