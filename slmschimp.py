@@ -132,8 +132,9 @@ class MailChimpAPI:
         url = self.url + f"/reporting/surveys/{self.survey_id}/responses"
         logging.debug("get_survey_responses: ...takes a little while...")
         response = None
+        payload = {'count': 100}
         try:
-            response = requests.get(url, auth=self.auth)
+            response = requests.get(url, params=payload, auth=self.auth)
         except Exception as error:
             logging.error(f"get_survey_responses: {error}")
         if response.status_code == 200:
@@ -320,6 +321,12 @@ class MailChimpAPI:
                           f"content for campaign_id: {campaign_id}. "
                           f"{response.status_code}")
             return response
+    
+    def get_campaign_info(self, campaign_id):
+        url = self.url + f"/campaigns/{campaign_id}"
+        response = None
+        response = requests.get(url, auth=self.auth)
+        return response
 
     def set_campaign_content(self, campaign_id, content):
         """ upload content to campaign_draft """
@@ -339,6 +346,13 @@ class MailChimpAPI:
                           f" campaign_id: {campaign_id}. "
                           f"{response.status_code}")
             return response.status_code
+
+    def get_campaign_checklist(self, campaign_id):
+        url = self.url + f"/campaigns/{campaign_id}/send-checklist"
+        response = None
+        response = requests.get(url, auth=self.auth)
+
+        return response
 
     def send_campaign(self, campaign_id):
         url = self.url + f"/campaigns/{campaign_id}/actions/send"
@@ -527,11 +541,15 @@ class Automation:
                 result['list_member'] = list_member
                 result['contact_id'] = contact_id
                 result['response_id'] = response_id
-                result['survey_result'] = self.api.get_survey_result(response_id)
+                result['survey_result'] = survey_result 
                 result['tags'] = self.api.list_tags(contact_id)['tags']
                 result['has_invite_tag'] = any(tag['id'] == 10201605 for tag in list_member['tags'])  # tag=slmschimp
                 result['is18+'] = any(tag['id'] == 10181290 for tag in list_member['tags'])
                 result['discourse_name'] = self.get_discourse_name(survey_result)
+                result['email'] = survey_result['contact']['email']
+                result['subscriber_status'] = survey_result['contact']['status']
+                result['invited_tag'] = any(tag['id'] == 10201605 for tag in list_member['tags'])
+                
 
                 processed_responses.append(result)
         else: 
@@ -630,46 +648,66 @@ class Automation:
         else:
             logging.info(f"status: We have no survey results. Nothing to do.")
 
-
-    def automate(self, processed_responses):
-        processed_ids = []
-        if processed_responses == []:
-            logging.info('automate: Nothing to do. No survey results, everything is chimpy!')
-        else:
-            logging.info(f'automate: start processing {len(processed_responses)} survey responses')
-            processed_ids = [] # we want to archive the contacts after succsessful send!
-            iso_date = datetime.now().date().isoformat()
+    def pre_process(self, processed_responses):
+        if processed_responses:
             for member in processed_responses:
                 contact_id = member['contact_id']
                 email = member['survey_result']['contact']['email']
                 subscriber_status = member['survey_result']['contact']['status']
 
-                if subscriber_status == "Subscribed":
-                    logging.debug(f"automate: List member {email} already subscribed.")
-                else:
-                    """ sadly, this is the way the API wants it... sigh!"""
-                    self.api.unsubscribe(contact_id, email)
-                    time.sleep(2)
-                    self.api.subscribe(contact_id, email)
-                
                 if member['is18+']:
-                    self.api.add_tag(contact_id, f"Invited-{iso_date}")
+                    self.api.add_tag(contact_id, f"Invited-{self.api.iso_date}")
                     self.api.add_tag(contact_id, 'slmschimp')
+
+                if not subscriber_status == "Subscribed":
+                    self.api.unsubscribe(contact_id, email)
+                    self.api.subscribe(contact_id, email)
+
                 else: 
                     logging.warning(f"automate: Member email: {email}, contact_id: {contact_id} not 18+!")
                     self.api.add_tag(contact_id, 'NoSend')
                     """ only subscribed members will be invited! """
                     self.api.unsubscribe(contact_id, email) 
 
+
+                    
+    def automate(self, processed_responses):
+        processed_ids = []
+        if not processed_responses:
+            logging.info('automate: Nothing to do. No survey results, everything is chimpy!')
+        else:
+            logging.info(f'automate: start processing {len(processed_responses)} survey responses')
+
+            for member in processed_responses:
+                contact_id = member['contact_id']
                 processed_ids.append(contact_id)
                     
             """ create new campaing and update content, i.e. OE Date and URL"""
             self.api.create_campaign()
+            """ trying to figure out why MC thinks there are no recipients """
+            self.api.get_campaign_info(self.api.draft_campaign_id())
+
+
             campaign_content = self.api.get_campaign_content(self.api.last_campaign_id())
             updated_content = self.update_campaign_content(
                 campaign_content, Discourse.get_openeve_date_and_url())
             self.api.set_campaign_content(self.api.draft_campaign_id(), updated_content)
+
             
+            self.api.get_campaign_info(self.api.draft_campaign_id())
+            
+            """ get campaign_send_checklist
+            very crude way just to figure out what mailchimp does
+            under the hood. Needs cleaning up soon!!!! """
+            res = self.api.get_campaign_checklist(self.api.draft_campaign_id())
+            if res.json()['is_ready'] != True:
+                time.sleep(6)
+            
+            res = self.api.get_campaign_checklist(self.api.draft_campaign_id())
+            if res.json()['is_ready'] != True:
+                raise Exception("campaign_checklist not ready!")
+
+
             """ send newly created campaign""" 
             try:
                 self.api.send_campaign(self.api.draft_campaign_id())
@@ -1102,10 +1140,9 @@ def main():
 
 if __name__ == '__main__':
     logging.info('SLMSChimp v1.1 ')
-    
-
     mc = MailChimpAPI()
     automation = Automation()
     processed_responses = automation.process_responses()
+
     main()
 
