@@ -548,7 +548,6 @@ class Automation:
                 result['discourse_name'] = self.get_discourse_name(survey_result)
                 result['email'] = survey_result['contact']['email']
                 result['subscriber_status'] = survey_result['contact']['status']
-                result['invited_tag'] = any(tag['id'] == 10201605 for tag in list_member['tags'])
                 
 
                 processed_responses.append(result)
@@ -624,24 +623,12 @@ class Automation:
         if processed_responses:
             member_data_list = []
             for member in processed_responses:
-                contact_id = member['contact_id']
-                response_id = member['response_id']
-                email = member['survey_result']['contact']['email']
-                subscriber_status = member['survey_result']['contact']['status']
-                is_18 = any(tag['id'] == 10181290 for tag in member['tags'])
-                invited = any(tag['id'] == 10201605 for tag in member['tags'])
-                member_data = {
-                    'Email': email,
-                    'Status': subscriber_status,
-                    'Is 18+': is_18,
-                    'Response ID': response_id,
-                    'Invited': invited}
-                member_data_list.append(member_data)
-            tabular_data = [[member_data['Email'],
-                             member_data['Status'],
-                             member_data['Is 18+'],
-                             member_data['Response ID'],
-                             member_data['Invited']] for member_data in member_data_list]
+                tabular_data = [[member['email'], 
+                                 member['subscriber_status'], 
+                                 member['is18+'], 
+                                 member['response_id'],
+                                 member['has_invite_tag']
+                                 ]]
             # column headers, oh so pretty.
             headers = ['Email', 'Status', 'Is 18+', 'Response ID', 'Invited']
             print(tabulate(tabular_data, headers=headers, tablefmt="simple"))
