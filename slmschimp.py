@@ -383,6 +383,19 @@ class MailChimpAPI:
         data = self.campaign_info("sending")['total_items']
         return True if data else False
 
+    def add_or_remove_tags(self, contact_id, tags, status):
+        url = self.url + f"/lists/{self.list_id}/members/{contact_id}/tags"
+
+        payload = {'tags': [],
+                   'is_syncing': False}
+        for tag in tags:
+            payload['tags'].append({'name': tag, 'status': status})
+
+        response = None
+        response = requests.post(url, json=payload, auth=self.auth)
+
+        return response
+
     def add_tag(self, contact_id, tag):
         url = self.url + f"/lists/{self.list_id}/members/{contact_id}/tags"
         payload = {'tags': [{'name': f'{tag}', 'status': 'active'}]}
@@ -538,16 +551,16 @@ class Automation:
                 response_id = self.get_response_id(contact_id)
                 survey_result = self.api.get_survey_result(response_id)
 
-                result['list_member'] = list_member
                 result['contact_id'] = contact_id
+                result['email'] = survey_result['contact']['email']
                 result['response_id'] = response_id
-                result['survey_result'] = survey_result 
                 result['tags'] = self.api.list_tags(contact_id)['tags']
                 result['has_invite_tag'] = any(tag['id'] == 10201605 for tag in list_member['tags'])  # tag=slmschimp
                 result['is18+'] = any(tag['id'] == 10181290 for tag in list_member['tags'])
                 result['discourse_name'] = self.get_discourse_name(survey_result)
-                result['email'] = survey_result['contact']['email']
                 result['subscriber_status'] = survey_result['contact']['status']
+                result['list_member'] = list_member
+                result['survey_result'] = survey_result 
                 
 
                 processed_responses.append(result)
@@ -639,8 +652,8 @@ class Automation:
         if processed_responses:
             for member in processed_responses:
                 contact_id = member['contact_id']
-                email = member['survey_result']['contact']['email']
-                subscriber_status = member['survey_result']['contact']['status']
+                email = member['email']
+                subscriber_status = member['subscriber_status']
 
                 if member['is18+']:
                     self.api.add_tag(contact_id, f"Invited-{self.api.iso_date}")
