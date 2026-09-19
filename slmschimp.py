@@ -386,13 +386,15 @@ class MailChimpAPI:
     def add_or_remove_tags(self, contact_id, tags, status):
         url = self.url + f"/lists/{self.list_id}/members/{contact_id}/tags"
 
-        payload = {'tags': [],
-                   'is_syncing': False}
+        data = {
+            'tags': [],
+            'is_syncing': False }
+
         for tag in tags:
-            payload['tags'].append({'name': tag, 'status': status})
+            data['tags'].append({'name': tag, 'status': status})
 
         response = None
-        response = requests.post(url, json=payload, auth=self.auth)
+        response = requests.post(url, json=data, auth=self.auth)
 
         return response
 
@@ -491,6 +493,23 @@ class MailChimpAPI:
             logging.error(f"unarchive: Unable to unarchive contact_id "
                           f"'{contact_id}'. {response.json()}")
         return response
+
+    def batch_subscribe(self, list_members, status):
+        url = self.url + f"/lists/{self.list_id}"
+        payload = {'skip_merge_validation': True}
+
+        data = {
+            'members': [],
+            'sync_tags': False,
+            'update_existing': True
+        }
+        for email in list_members:
+            data['members'].append({'email_address': email, 'status': status})
+
+        response = None
+        response = requests.post(url, json=data, params=payload, auth=self.auth)
+        return response
+
 
     def subscribe(self, contact_id, email_address):
         url = self.url + f"/lists/{self.list_id}/members/{contact_id}"
@@ -634,14 +653,14 @@ class Automation:
 
     def status(self, processed_responses):
         if processed_responses:
-            member_data_list = []
+            tabular_data = []
             for member in processed_responses:
-                tabular_data = [[member['email'], 
+                tabular_data.append([member['email'], 
                                  member['subscriber_status'], 
                                  member['is18+'], 
                                  member['response_id'],
                                  member['has_invite_tag']
-                                 ]]
+                                 ])
             # column headers, oh so pretty.
             headers = ['Email', 'Status', 'Is 18+', 'Response ID', 'Invited']
             print(tabulate(tabular_data, headers=headers, tablefmt="simple"))
@@ -650,24 +669,38 @@ class Automation:
 
     def pre_process(self, processed_responses):
         if processed_responses:
+            tags = ['slmschimp', f'Invited-{self.api.iso_date}']
+            emails = []
+
             for member in processed_responses:
-                contact_id = member['contact_id']
-                email = member['email']
-                subscriber_status = member['subscriber_status']
+                emails.append(member['email'])
 
                 if member['is18+']:
-                    self.api.add_tag(contact_id, f"Invited-{self.api.iso_date}")
-                    self.api.add_tag(contact_id, 'slmschimp')
+                    self.api.add_or_remove_tags(member['contact_id'], tags, 'active')
+                else:
+                    self.api.add_or_remove_tags(member['contact_id'], ['NoSend'], 'active')
+                    self.api.unsubscribe(member['contact_id'], member['email'])
 
-                if not subscriber_status == "Subscribed":
-                    self.api.unsubscribe(contact_id, email)
-                    self.api.subscribe(contact_id, email)
+            self.api.batch_subscribe(emails, 'subscribed')
 
-                else: 
-                    logging.warning(f"automate: Member email: {email}, contact_id: {contact_id} not 18+!")
-                    self.api.add_tag(contact_id, 'NoSend')
-                    """ only subscribed members will be invited! """
-                    self.api.unsubscribe(contact_id, email) 
+
+#                contact_id = member['contact_id']
+#                email = member['email']
+#                subscriber_status = member['subscriber_status']
+#
+#                if member['is18+']:
+#                    self.api.add_tag(contact_id, f"Invited-{self.api.iso_date}")
+#                    self.api.add_tag(contact_id, 'slmschimp')
+#
+#                if not subscriber_status == "Subscribed":
+#                    self.api.unsubscribe(contact_id, email)
+#                    self.api.subscribe(contact_id, email)
+#
+#                else: 
+#                    logging.warning(f"automate: Member email: {email}, contact_id: {contact_id} not 18+!")
+#                    self.api.add_tag(contact_id, 'NoSend')
+#                    """ only subscribed members will be invited! """
+#                    self.api.unsubscribe(contact_id, email) 
 
 
                     
@@ -679,22 +712,18 @@ class Automation:
             logging.info(f'automate: start processing {len(processed_responses)} survey responses')
 
             for member in processed_responses:
-                contact_id = member['contact_id']
-                processed_ids.append(contact_id)
+                processed_ids.append(member['contact_id'])
                     
             """ create new campaing and update content, i.e. OE Date and URL"""
             self.api.create_campaign()
-            """ trying to figure out why MC thinks there are no recipients """
-            self.api.get_campaign_info(self.api.draft_campaign_id())
-
 
             campaign_content = self.api.get_campaign_content(self.api.last_campaign_id())
             updated_content = self.update_campaign_content(
                 campaign_content, Discourse.get_openeve_date_and_url())
             self.api.set_campaign_content(self.api.draft_campaign_id(), updated_content)
+            time.sleep(5)
 
-            
-            self.api.get_campaign_info(self.api.draft_campaign_id())
+            # self.api.get_campaign_info(self.api.draft_campaign_id())
             
             """ get campaign_send_checklist
             very crude way just to figure out what mailchimp does
