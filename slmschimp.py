@@ -723,7 +723,7 @@ class Automation:
             self.api.set_campaign_content(self.api.draft_campaign_id(), updated_content)
             time.sleep(5)
 
-            # self.api.get_campaign_info(self.api.draft_campaign_id())
+            self.api.get_campaign_info(self.api.draft_campaign_id())
             
             """ get campaign_send_checklist
             very crude way just to figure out what mailchimp does
@@ -731,6 +731,7 @@ class Automation:
             res = self.api.get_campaign_checklist(self.api.draft_campaign_id())
             if res.json()['is_ready'] != True:
                 time.sleep(6)
+                self.api.get_campaign_info(self.api.draft_campaign_id())
             
             res = self.api.get_campaign_checklist(self.api.draft_campaign_id())
             if res.json()['is_ready'] != True:
