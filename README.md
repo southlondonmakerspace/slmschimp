@@ -1,5 +1,5 @@
 # slmschimp
-### version 1.1
+### version 1.2
 
 to run
  - .env file with credentials
