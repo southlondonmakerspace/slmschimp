@@ -709,7 +709,7 @@ class Automation:
             under the hood. Needs cleaning up soon!!!! """
             res = self.api.get_campaign_checklist(self.api.draft_campaign_id())
             if res.json()['is_ready'] != True:
-                time.sleep(10)
+                time.sleep(15) # This seems to have fixed 95 percent of fails
                 self.api.get_campaign_info(self.api.draft_campaign_id())
             
             res = self.api.get_campaign_checklist(self.api.draft_campaign_id())
