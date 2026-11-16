@@ -683,27 +683,6 @@ class Automation:
 
             self.api.batch_subscribe(emails, 'subscribed')
 
-
-#                contact_id = member['contact_id']
-#                email = member['email']
-#                subscriber_status = member['subscriber_status']
-#
-#                if member['is18+']:
-#                    self.api.add_tag(contact_id, f"Invited-{self.api.iso_date}")
-#                    self.api.add_tag(contact_id, 'slmschimp')
-#
-#                if not subscriber_status == "Subscribed":
-#                    self.api.unsubscribe(contact_id, email)
-#                    self.api.subscribe(contact_id, email)
-#
-#                else: 
-#                    logging.warning(f"automate: Member email: {email}, contact_id: {contact_id} not 18+!")
-#                    self.api.add_tag(contact_id, 'NoSend')
-#                    """ only subscribed members will be invited! """
-#                    self.api.unsubscribe(contact_id, email) 
-
-
-                    
     def automate(self, processed_responses):
         processed_ids = []
         if not processed_responses:
